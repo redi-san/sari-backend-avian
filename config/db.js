@@ -1,38 +1,21 @@
-/*const mysql = require("mysql2");
-
-// Use environment variables for host, user, password, and database
-const db = mysql.createConnection({
-  host: process.env.DB_HOST || "localhost",
-  user: process.env.DB_USER || "root",
-  password: process.env.DB_PASS || "password",
-  database: process.env.DB_NAME || "sari_manage"
-});
-
-db.connect((err) => {
-  if (err) throw err;
-  console.log("✅ Connected to MySQL Database");
-});
-
-module.exports = db; */
-
-require('dotenv').config(); // <-- loads variables from .env
-
+// config/db.js
 const mysql = require("mysql2");
 
 const db = mysql.createConnection({
-  host: process.env.DB_HOST,
-  port: process.env.DB_PORT || 3306,
-  user: process.env.DB_USER,
-  password: process.env.DB_PASS,
-  database: process.env.DB_NAME
+  host: process.env.MYSQLHOST,
+  port: process.env.MYSQLPORT || 3306,
+  user: process.env.MYSQLUSER,
+  password: process.env.MYSQLPASSWORD,
+  database: process.env.MYSQLDATABASE
 });
 
 db.connect((err) => {
   if (err) {
     console.error("❌ Database connection failed:", err);
-    return;
+    process.exit(1); // stop server if DB fails
+  } else {
+    console.log("✅ Connected to MySQL Database");
   }
-  console.log("✅ Connected to Railway MySQL");
 });
 
 module.exports = db;
