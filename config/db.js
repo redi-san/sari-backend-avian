@@ -9,7 +9,7 @@ const db = mysql.createConnection({
   password: process.env.DB_PASS,
   database: process.env.DB_NAME,
   ssl: {
-    rejectUnauthorized: true // ensures SSL is required
+    rejectUnauthorized: false // allow self-signed certificate from Avian
   }
 });
 
