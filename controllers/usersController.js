@@ -1,5 +1,6 @@
 const User = require("../models/Users");
 
+
 exports.registerUser = (req, res) => {
   const {
     firebase_uid,
