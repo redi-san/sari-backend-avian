@@ -33,7 +33,6 @@ exports.getOrders = (req, res) => {
       return res.status(500).send(err);
     }
 
-    // Parse JSON string into array
     results.forEach(order => {
       try {
         order.products = JSON.parse(order.products);
@@ -66,18 +65,16 @@ exports.createOrder = (req, res) => {
     return res.status(400).json({ error: "firebase_uid is required" });
   }
 
-  // find user_id by firebase_uid
-  User.findbyUid(firebase_uid, (err, rows) => {
+  // ✅ Corrected function name
+  User.findByUid(firebase_uid, (err, rows) => {
     if (err) return res.status(500).json({ error: "DB error while finding user" });
     if (rows.length === 0) return res.status(404).json({ error: "User not found" });
 
     const user_id = rows[0].id;
 
-    // start transaction
     db.beginTransaction((err) => {
       if (err) return res.status(500).json({ error: "Failed to start transaction" });
 
-      // create order
       Order.create({ user_id, order_number, customer_name, total, profit }, (err2, orderId) => {
         if (err2) {
           return db.rollback(() => {
@@ -85,7 +82,6 @@ exports.createOrder = (req, res) => {
           });
         }
 
-        // insert products
         OrderProduct.bulkInsert(orderId, products, (err3) => {
           if (err3) {
             return db.rollback(() => {
@@ -93,7 +89,6 @@ exports.createOrder = (req, res) => {
             });
           }
 
-          // commit transaction
           db.commit((err4) => {
             if (err4) {
               return db.rollback(() => {
@@ -109,7 +104,6 @@ exports.createOrder = (req, res) => {
   });
 };
 
-
 exports.deleteOrder = (req, res) => {
   const orderId = req.params.id;
 
@@ -123,8 +117,6 @@ exports.deleteOrder = (req, res) => {
   });
 };
 
-
-
 exports.updateOrder = (req, res) => {
   const orderId = req.params.id;
   const { customer_name, total, profit, products } = req.body;
@@ -132,11 +124,9 @@ exports.updateOrder = (req, res) => {
   db.beginTransaction((err) => {
     if (err) return res.status(500).json({ error: "Transaction start failed" });
 
-    // 1️⃣ Fetch old products to restore their stock
     db.query("SELECT name, quantity FROM order_products WHERE order_id = ?", [orderId], (err1, oldProducts) => {
       if (err1) return db.rollback(() => res.status(500).json({ error: err1.message }));
 
-      // 2️⃣ Restore old stock levels
       const restoreStock = (callback) => {
         if (!oldProducts.length) return callback();
 
@@ -160,11 +150,9 @@ exports.updateOrder = (req, res) => {
       restoreStock((restoreErr) => {
         if (restoreErr) return db.rollback(() => res.status(500).json({ error: restoreErr.message }));
 
-        // 3️⃣ Delete old products
         db.query("DELETE FROM order_products WHERE order_id = ?", [orderId], (err3) => {
           if (err3) return db.rollback(() => res.status(500).json({ error: err3.message }));
 
-          // 4️⃣ Insert updated products
           const insertValues = products.map((p) => [
             orderId,
             p.stock_id,
@@ -182,7 +170,6 @@ exports.updateOrder = (req, res) => {
           db.query(insertQuery, [insertValues], (err4) => {
             if (err4) return db.rollback(() => res.status(500).json({ error: err4.message }));
 
-            // 5️⃣ Deduct new stock levels
             let j = 0;
             function deductNext() {
               if (j >= products.length) return commitAll();
@@ -198,7 +185,6 @@ exports.updateOrder = (req, res) => {
               );
             }
 
-            // 6️⃣ Commit all
             function commitAll() {
               db.query(
                 "UPDATE orders SET customer_name = ?, total = ?, profit = ? WHERE id = ?",
@@ -207,10 +193,7 @@ exports.updateOrder = (req, res) => {
                   if (err6) return db.rollback(() => res.status(500).json({ error: err6.message }));
 
                   db.commit((err7) => {
-                    if (err7)
-                      return db.rollback(() =>
-                        res.status(500).json({ error: err7.message })
-                      );
+                    if (err7) return db.rollback(() => res.status(500).json({ error: err7.message }));
                     res.json({ success: true, message: "Order updated and stocks adjusted" });
                   });
                 }
@@ -232,7 +215,6 @@ exports.getOrdersByUser = (req, res) => {
     return res.status(400).json({ error: "firebase_uid is required" });
   }
 
-  // 1️⃣ Find user_id from firebase_uid
   const userQuery = "SELECT id FROM users WHERE firebase_uid = ?";
   db.query(userQuery, [firebase_uid], (err, userResult) => {
     if (err) return res.status(500).json({ error: "DB error while finding user" });
@@ -240,7 +222,6 @@ exports.getOrdersByUser = (req, res) => {
 
     const user_id = userResult[0].id;
 
-    // 2️⃣ Get that user's orders
     const sql = `
       SELECT 
         o.id, 
