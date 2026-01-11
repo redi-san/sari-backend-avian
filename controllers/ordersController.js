@@ -11,6 +11,8 @@ exports.getOrders = (req, res) => {
       o.customer_name, 
       o.total, 
       o.profit,
+      o.payment_amount,
+      o.change_amount,
       COALESCE(
         JSON_ARRAYAGG(
           JSON_OBJECT(
@@ -47,6 +49,7 @@ exports.getOrders = (req, res) => {
 
 exports.getOrderById = (req, res) => {
   const orderId = req.params.id;
+
   Order.getById(orderId, (err, order) => {
     if (err) return res.status(500).send(err);
     if (!order) return res.status(404).send("Order not found");
@@ -59,13 +62,21 @@ exports.getOrderById = (req, res) => {
 };
 
 exports.createOrder = (req, res) => {
-  const { firebase_uid, order_number, customer_name, total, profit, products } = req.body;
+  const {
+    firebase_uid,
+    order_number,
+    customer_name,
+    total,
+    profit,
+    payment_amount,
+    change_amount,
+    products
+  } = req.body;
 
   if (!firebase_uid) {
     return res.status(400).json({ error: "firebase_uid is required" });
   }
 
-  // ✅ Corrected function name
   User.findByUid(firebase_uid, (err, rows) => {
     if (err) return res.status(500).json({ error: "DB error while finding user" });
     if (rows.length === 0) return res.status(404).json({ error: "User not found" });
@@ -75,31 +86,42 @@ exports.createOrder = (req, res) => {
     db.beginTransaction((err) => {
       if (err) return res.status(500).json({ error: "Failed to start transaction" });
 
-      Order.create({ user_id, order_number, customer_name, total, profit }, (err2, orderId) => {
-        if (err2) {
-          return db.rollback(() => {
-            res.status(500).json({ error: err2.message || "Failed to create order." });
-          });
-        }
-
-        OrderProduct.bulkInsert(orderId, products, (err3) => {
-          if (err3) {
+      Order.create(
+        {
+          user_id,
+          order_number,
+          customer_name,
+          total,
+          profit,
+          payment_amount,
+          change_amount
+        },
+        (err2, orderId) => {
+          if (err2) {
             return db.rollback(() => {
-              res.status(400).json({ error: err3.message || "Failed to insert products." });
+              res.status(500).json({ error: err2.message || "Failed to create order." });
             });
           }
 
-          db.commit((err4) => {
-            if (err4) {
+          OrderProduct.bulkInsert(orderId, products, (err3) => {
+            if (err3) {
               return db.rollback(() => {
-                res.status(500).json({ error: "Failed to commit transaction" });
+                res.status(400).json({ error: err3.message || "Failed to insert products." });
               });
             }
 
-            res.json({ success: true, orderId });
+            db.commit((err4) => {
+              if (err4) {
+                return db.rollback(() => {
+                  res.status(500).json({ error: "Failed to commit transaction" });
+                });
+              }
+
+              res.json({ success: true, orderId });
+            });
           });
-        });
-      });
+        }
+      );
     });
   });
 };
@@ -119,92 +141,127 @@ exports.deleteOrder = (req, res) => {
 
 exports.updateOrder = (req, res) => {
   const orderId = req.params.id;
-  const { customer_name, total, profit, products } = req.body;
+  const {
+    customer_name,
+    total,
+    profit,
+    payment_amount,
+    change_amount,
+    products
+  } = req.body;
 
   db.beginTransaction((err) => {
     if (err) return res.status(500).json({ error: "Transaction start failed" });
 
-    db.query("SELECT name, quantity FROM order_products WHERE order_id = ?", [orderId], (err1, oldProducts) => {
-      if (err1) return db.rollback(() => res.status(500).json({ error: err1.message }));
+    db.query(
+      "SELECT name, quantity FROM order_products WHERE order_id = ?",
+      [orderId],
+      (err1, oldProducts) => {
+        if (err1) return db.rollback(() => res.status(500).json({ error: err1.message }));
 
-      const restoreStock = (callback) => {
-        if (!oldProducts.length) return callback();
+        const restoreStock = (callback) => {
+          if (!oldProducts.length) return callback();
 
-        let i = 0;
-        function restoreNext() {
-          if (i >= oldProducts.length) return callback();
-          const p = oldProducts[i];
+          let i = 0;
+          function restoreNext() {
+            if (i >= oldProducts.length) return callback();
+            const p = oldProducts[i];
+
+            db.query(
+              "UPDATE stocks SET stock = stock + ? WHERE name = ?",
+              [p.quantity, p.name],
+              (err2) => {
+                if (err2) return callback(err2);
+                i++;
+                restoreNext();
+              }
+            );
+          }
+          restoreNext();
+        };
+
+        restoreStock((restoreErr) => {
+          if (restoreErr) return db.rollback(() => res.status(500).json({ error: restoreErr.message }));
+
           db.query(
-            "UPDATE stocks SET stock = stock + ? WHERE name = ?",
-            [p.quantity, p.name],
-            (err2) => {
-              if (err2) return callback(err2);
-              i++;
-              restoreNext();
-            }
-          );
-        }
-        restoreNext();
-      };
+            "DELETE FROM order_products WHERE order_id = ?",
+            [orderId],
+            (err3) => {
+              if (err3) return db.rollback(() => res.status(500).json({ error: err3.message }));
 
-      restoreStock((restoreErr) => {
-        if (restoreErr) return db.rollback(() => res.status(500).json({ error: restoreErr.message }));
+              const insertValues = products.map((p) => [
+                orderId,
+                p.stock_id,
+                p.name,
+                p.quantity,
+                p.selling_price,
+                p.buying_price,
+              ]);
 
-        db.query("DELETE FROM order_products WHERE order_id = ?", [orderId], (err3) => {
-          if (err3) return db.rollback(() => res.status(500).json({ error: err3.message }));
-
-          const insertValues = products.map((p) => [
-            orderId,
-            p.stock_id,
-            p.name,
-            p.quantity,
-            p.selling_price,
-            p.buying_price,
-          ]);
-
-          const insertQuery = `
-            INSERT INTO order_products (order_id, stock_id, name, quantity, selling_price, buying_price)
-            VALUES ?
-          `;
-
-          db.query(insertQuery, [insertValues], (err4) => {
-            if (err4) return db.rollback(() => res.status(500).json({ error: err4.message }));
-
-            let j = 0;
-            function deductNext() {
-              if (j >= products.length) return commitAll();
-              const p = products[j];
               db.query(
-                "UPDATE stocks SET stock = stock - ? WHERE name = ?",
-                [p.quantity, p.name],
-                (err5) => {
-                  if (err5) return db.rollback(() => res.status(500).json({ error: err5.message }));
-                  j++;
+                `
+                INSERT INTO order_products 
+                (order_id, stock_id, name, quantity, selling_price, buying_price)
+                VALUES ?
+                `,
+                [insertValues],
+                (err4) => {
+                  if (err4) return db.rollback(() => res.status(500).json({ error: err4.message }));
+
+                  let j = 0;
+                  function deductNext() {
+                    if (j >= products.length) return commitAll();
+                    const p = products[j];
+
+                    db.query(
+                      "UPDATE stocks SET stock = stock - ? WHERE name = ?",
+                      [p.quantity, p.name],
+                      (err5) => {
+                        if (err5) return db.rollback(() => res.status(500).json({ error: err5.message }));
+                        j++;
+                        deductNext();
+                      }
+                    );
+                  }
+
+                  function commitAll() {
+                    db.query(
+                      `
+                      UPDATE orders 
+                      SET customer_name = ?, 
+                          total = ?, 
+                          profit = ?, 
+                          payment_amount = ?, 
+                          change_amount = ?
+                      WHERE id = ?
+                      `,
+                      [
+                        customer_name,
+                        total,
+                        profit,
+                        payment_amount,
+                        change_amount,
+                        orderId
+                      ],
+                      (err6) => {
+                        if (err6) return db.rollback(() => res.status(500).json({ error: err6.message }));
+
+                        db.commit((err7) => {
+                          if (err7) return db.rollback(() => res.status(500).json({ error: err7.message }));
+                          res.json({ success: true, message: "Order updated successfully" });
+                        });
+                      }
+                    );
+                  }
+
                   deductNext();
                 }
               );
             }
-
-            function commitAll() {
-              db.query(
-                "UPDATE orders SET customer_name = ?, total = ?, profit = ? WHERE id = ?",
-                [customer_name, total, profit, orderId],
-                (err6) => {
-                  if (err6) return db.rollback(() => res.status(500).json({ error: err6.message }));
-
-                  db.commit((err7) => {
-                    if (err7) return db.rollback(() => res.status(500).json({ error: err7.message }));
-                    res.json({ success: true, message: "Order updated and stocks adjusted" });
-                  });
-                }
-              );
-            }
-
-            deductNext();
-          });
+          );
         });
-      });
-    });
+      }
+    );
   });
 };
 
@@ -229,6 +286,8 @@ exports.getOrdersByUser = (req, res) => {
         o.customer_name, 
         o.total, 
         o.profit,
+        o.payment_amount,
+        o.change_amount,
         COALESCE(
           JSON_ARRAYAGG(
             JSON_OBJECT(
