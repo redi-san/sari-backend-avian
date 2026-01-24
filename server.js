@@ -23,7 +23,7 @@ app.use("/debts", debtsRoutes);
 app.use("/sms", smsRoutes); // ✅ REGISTER HERE
 
 // Serve uploaded files
-app.use("/uploads", express.static("public/uploads"));
+//app.use("/uploads", express.static("public/uploads"));
 
 // Start server
 const PORT = process.env.PORT || 5000;

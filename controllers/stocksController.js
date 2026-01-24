@@ -27,7 +27,9 @@ exports.createStock = (req, res) => {
     return res.status(400).json({ error: "Missing required stock fields" });
   }
 
-  const imagePath = req.file ? `/uploads/${req.file.filename}` : null;
+  //const imagePath = req.file ? `/uploads/${req.file.filename}` : null;
+  const imagePath = req.file ? req.file.path : null;
+
 
   // ✅ FIXED: Correct function name
   User.findByUid(firebase_uid, (err, rows) => {
@@ -76,9 +78,14 @@ exports.createStock = (req, res) => {
 exports.updateStock = (req, res) => {
   const updatedData = req.body;
 
-  if (req.file) {
+  /*if (req.file) {
     updatedData.image = `/uploads/${req.file.filename}`;
-  }
+  } */
+
+    if (req.file) {
+  updatedData.image = req.file.path;
+}
+
 
   Stock.update(req.params.id, updatedData, (err) => {
     if (err) return res.status(500).send(err);
