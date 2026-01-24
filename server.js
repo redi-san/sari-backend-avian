@@ -7,8 +7,9 @@ const ordersRoutes = require("./routes/orders");
 const stocksRoutes = require("./routes/stocks");
 const usersRoutes = require("./routes/users");
 const debtsRoutes = require("./routes/debts");
+const smsRoutes = require("./routes/sms"); // ✅ IMPORT ONLY
 
-const app = express();
+const app = express(); // ✅ app created here
 
 // Middleware
 app.use(cors());
@@ -19,6 +20,7 @@ app.use("/orders", ordersRoutes);
 app.use("/stocks", stocksRoutes);
 app.use("/users", usersRoutes);
 app.use("/debts", debtsRoutes);
+app.use("/sms", smsRoutes); // ✅ REGISTER HERE
 
 // Serve uploaded files
 app.use("/uploads", express.static("public/uploads"));
