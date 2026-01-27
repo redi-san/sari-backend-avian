@@ -50,12 +50,12 @@ async function sendDebtReminders() {
         const productList = (debt.products || [])
           .map((p) => `${p.name} x${p.quantity || 0}`)
           .join(", ");
-        const sellerName = process.env.SELLER_NAME || "Your Seller";
+        //const sellerName = process.env.SELLER_NAME || "Your Seller";
 
-        const message = `Hi ${debt.customer_name}, this is a friendly reminder that your debt of ₱${currentBalance} is due${debt.due_date ? ` on ${debt.due_date}` : ""}.\n\n` +
-                        `Products: ${productList}.\n\n` +
-                        `Please settle it at your earliest convenience.\n\n` +
-                        `From, ${sellerName}`;
+const message = `Hi ${debt.customer_name}, this is a friendly reminder that your debt of ₱${currentBalance}` +
+  `${debt.due_date ? ` is due on ${debt.due_date}` : ""}.\n\n` +
+  `Products: ${productList}.\n\n` +
+  `Please settle it at your earliest convenience.`;
 
         try {
           await axios.post(`${BASE_URL}/sms/reminder`, { number: debt.contact_number, message });
@@ -71,12 +71,14 @@ async function sendDebtReminders() {
   }
 }
 
-// --- Run immediately on server start ---
+//Run immediately on server start
 //sendDebtReminders();
 
-// --- Schedule daily cron at 07:55 ---
-cron.schedule("30 1 * * *", sendDebtReminders);
+// Run at 8:00 AM Philippines time (0:00 UTC)
+cron.schedule("0 0 * * *", sendDebtReminders);
 
 // Start server
-const PORT = process.env.PORT || 5000;
+const PORT = process.env.PORT || 5000;``
 app.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
+
+
