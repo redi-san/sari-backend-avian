@@ -75,7 +75,7 @@ async function sendDebtReminders() {
 //sendDebtReminders();
 
 // --- Schedule daily cron at 07:55 ---
-cron.schedule("30 8 * * *", sendDebtReminders);
+cron.schedule("0 1 * * *", sendDebtReminders);
 
 // Start server
 const PORT = process.env.PORT || 5000;
