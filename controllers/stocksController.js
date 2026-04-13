@@ -17,24 +17,43 @@ exports.getStockBylowstock = (req, res) => {
 };
 
 exports.createStock = (req, res) => {
-  const { firebase_uid, id, barcode, name, category, stock: qty, lowstock, buying_price, selling_price, manufacturing_date, expiry_date } = req.body;
+  const {
+    firebase_uid,
+    id,
+    barcode,
+    name,
+    category,
+    stock: qty,
+    lowstock,
+    buying_price,
+    selling_price,
+    manufacturing_date,
+    expiry_date,
+  } = req.body;
 
   if (!firebase_uid) {
     return res.status(400).json({ error: "firebase_uid is required" });
   }
 
-  if (!name || !category || qty == null || buying_price == null || selling_price == null) {
+  if (
+    !name ||
+    !category ||
+    qty == null ||
+    buying_price == null ||
+    selling_price == null
+  ) {
     return res.status(400).json({ error: "Missing required stock fields" });
   }
 
-  //const imagePath = req.file ? `/uploads/${req.file.filename}` : null;
   const imagePath = req.file ? req.file.path : null;
 
-
-  // ✅ FIXED: Correct function name
   User.findByUid(firebase_uid, (err, rows) => {
-    if (err) return res.status(500).json({ error: "Database error while finding user" });
-    if (rows.length === 0) return res.status(404).json({ error: "User not found" });
+    if (err)
+      return res
+        .status(500)
+        .json({ error: "Database error while finding user" });
+    if (rows.length === 0)
+      return res.status(404).json({ error: "User not found" });
 
     const user_id = rows[0].id;
 
@@ -51,7 +70,7 @@ exports.createStock = (req, res) => {
         selling_price,
         manufacturing_date,
         expiry_date,
-        image: imagePath
+        image: imagePath,
       },
       (err2, stockId) => {
         if (err2) return res.status(500).json({ error: err2.message });
@@ -70,7 +89,7 @@ exports.createStock = (req, res) => {
           expiry_date,
           image: imagePath,
         });
-      }
+      },
     );
   });
 };
@@ -78,14 +97,9 @@ exports.createStock = (req, res) => {
 exports.updateStock = (req, res) => {
   const updatedData = req.body;
 
-  /*if (req.file) {
-    updatedData.image = `/uploads/${req.file.filename}`;
-  } */
-
-    if (req.file) {
-  updatedData.image = req.file.path;
-}
-
+  if (req.file) {
+    updatedData.image = req.file.path;
+  }
 
   Stock.update(req.params.id, updatedData, (err) => {
     if (err) return res.status(500).send(err);
@@ -105,16 +119,40 @@ exports.getStocksByUser = (req, res) => {
 
   const User = require("../models/Users");
 
-  // ✅ FIXED: Correct function name
   User.findByUid(firebase_uid, (err, users) => {
     if (err) return res.status(500).json({ error: "Database error" });
-    if (users.length === 0) return res.status(404).json({ error: "User not found" });
+    if (users.length === 0)
+      return res.status(404).json({ error: "User not found" });
 
     const user_id = users[0].id;
 
     Stock.getByUserId(user_id, (err2, stocks) => {
       if (err2) return res.status(500).json({ error: err2.message });
       res.json(stocks);
+    });
+  });
+};
+
+exports.deleteStocksByCategory = (req, res) => {
+  const { firebase_uid } = req.params;
+  const { category } = req.body;
+
+  if (!firebase_uid)
+    return res.status(400).json({ error: "firebase_uid is required" });
+  if (!category) return res.status(400).json({ error: "category is required" });
+
+  User.findByUid(firebase_uid, (err, rows) => {
+    if (err)
+      return res
+        .status(500)
+        .json({ error: "Database error while finding user" });
+    if (!rows?.length) return res.status(404).json({ error: "User not found" });
+
+    const user_id = rows[0].id;
+
+    Stock.deleteByCategory(user_id, category, (err2, result) => {
+      if (err2) return res.status(500).json({ error: err2.message });
+      res.json({ success: true, deleted: result?.affectedRows || 0 });
     });
   });
 };

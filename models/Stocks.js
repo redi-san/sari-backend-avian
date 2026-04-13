@@ -13,56 +13,95 @@ const Stock = {
   },
 
   getByUserId: (user_id, callback) => {
-  db.query("SELECT * FROM stocks WHERE user_id = ?", [user_id], callback);
-},
-
+    db.query("SELECT * FROM stocks WHERE user_id = ?", [user_id], callback);
+  },
 
   create: (stock, callback) => {
-    const { user_id, barcode, name, category, stock: qty, lowstock, buying_price, selling_price, manufacturing_date, expiry_date, image } = stock;
+    const {
+      user_id,
+      barcode,
+      name,
+      category,
+      stock: qty,
+      lowstock,
+      buying_price,
+      selling_price,
+      manufacturing_date,
+      expiry_date,
+      image,
+    } = stock;
     const query = `
       INSERT INTO stocks 
       (user_id, barcode, name, category, stock, lowstock, buying_price, selling_price,  manufacturing_date, expiry_date, image) 
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `;
-    db.query(query, [user_id, barcode, name, category, qty, lowstock, buying_price, selling_price,  manufacturing_date, expiry_date, image], (err, result) => {
-      if (err) return callback(err, null);
-      callback(null, result.insertId);
-    });
+    db.query(
+      query,
+      [
+        user_id,
+        barcode,
+        name,
+        category,
+        qty,
+        lowstock,
+        buying_price,
+        selling_price,
+        manufacturing_date,
+        expiry_date,
+        image,
+      ],
+      (err, result) => {
+        if (err) return callback(err, null);
+        callback(null, result.insertId);
+      },
+    );
+  },
+
+  deleteByCategory: (user_id, category, callback) => {
+    db.query(
+      "DELETE FROM stocks WHERE user_id = ? AND category = ?",
+      [user_id, category],
+      callback,
+    );
   },
 
   update: (id, stock, callback) => {
-  //const { name, barcode, category, stock: qty, lowstock, buying_price, selling_price, notes, image } = stock;
-  const { name, barcode, category, stock: qty, lowstock, buying_price, selling_price, manufacturing_date, expiry_date, image } = stock;
+    const allowed = [
+      "name",
+      "barcode",
+      "category",
+      "stock",
+      "lowstock",
+      "buying_price",
+      "selling_price",
+      "manufacturing_date",
+      "expiry_date",
+      "image",
+    ];
 
+    const fields = [];
+    const params = [];
 
-  let query, params;
+    for (const key of allowed) {
+      if (stock[key] !== undefined) {
+        fields.push(`${key}=?`);
+        params.push(stock[key]);
+      }
+    }
 
-  if (image) {
-    // If a new image is uploaded
-    query = `
-      UPDATE stocks 
-      SET name=?, barcode=?, category=?, stock=?, lowstock=?, buying_price=?, selling_price=?, manufacturing_date=?, expiry_date=?, image=? 
-      WHERE id=?
-    `;
-    params = [name, barcode, category, qty, lowstock, buying_price, selling_price, manufacturing_date, expiry_date, image, id];
-  } else {
-    // If no image is uploaded, don't overwrite existing one
-    query = `
-      UPDATE stocks 
-      SET name=?, barcode=?, category=?, stock=?, lowstock=?, buying_price=?, selling_price=?, manufacturing_date=?, expiry_date=? 
-      WHERE id=?
-    `;
-    params = [name, barcode, category, qty, lowstock, buying_price, selling_price, manufacturing_date, expiry_date, id];
-  }
+    if (fields.length === 0) {
+      return callback(null); 
+    }
 
-  db.query(query, params, callback);
-},
+    const query = `UPDATE stocks SET ${fields.join(", ")} WHERE id=?`;
+    params.push(id);
 
+    db.query(query, params, callback);
+  },
 
   delete: (id, callback) => {
     db.query("DELETE FROM stocks WHERE id = ?", [id], callback);
-  }
+  },
 };
 
 module.exports = Stock;
-
